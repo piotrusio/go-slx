@@ -21,6 +21,7 @@ func New(
 	ctx context.Context, uri string, maxOpenConns, maxIdleConns int,
 	maxIdleTime time.Duration, logger *slog.Logger,
 ) (*SQLServer, error) {
+	logger = logger.With("component", "database", "type", "sqlserver")
 
 	if uri == "" {
 		return nil, fmt.Errorf("database uri string is empty")
@@ -43,20 +44,14 @@ func New(
 	if err != nil {
 		// Ensure pool is closed if ping fails to prevent leaks
 		if closeErr := pool.Close(); closeErr != nil {
-			logger.Error("Failed to close pool after ping error",
+			logger.Error("failed to close pool after ping error",
 				"closeError", closeErr)
 		}
-		logger.Error("Database ping failed", "error", err)
+		logger.Error("database ping failed", "error", err)
 		// Don't wrap the original driver error directly in production
 		// logs to avoid leaking details.
 		return nil, fmt.Errorf("unable to verify database connection")
 	}
-
-	logger.Info("Database connection pool established",
-		"maxOpenConns", maxOpenConns,
-		"maxIdleConns", maxIdleConns,
-		"maxIdleTime", maxIdleTime,
-	)
 
 	// Return the wrapper struct containing the pool and logger
 	return &SQLServer{Pool: pool, logger: logger}, nil
@@ -64,10 +59,10 @@ func New(
 
 func (s *SQLServer) Close() {
 	if s.Pool != nil {
-		s.logger.Info("Closing database connection pool.")
+		s.logger.Info("closing database connection pool.")
 		// sql.DB.Close() waits for connections to be returned before closing.
 		if err := s.Pool.Close(); err != nil {
-			s.logger.Error("Error closing database connection pool",
+			s.logger.Error("error closing database connection pool",
 				"error", err)
 		}
 	}

@@ -13,6 +13,8 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/nats-io/nats.go"
 	"gworks.dev/slx/internal/database"
+	"gworks.dev/slx/internal/dispatcher"
+	"gworks.dev/slx/internal/messaging"
 
 	sentryslog "github.com/getsentry/sentry-go/slog"
 )
@@ -22,6 +24,7 @@ type config struct {
 	db     dbConfig
 	nats   publisherConfig
 	sentry loggerConfig
+	disp   dispatcherConfig
 }
 
 type dbConfig struct {
@@ -38,6 +41,11 @@ type publisherConfig struct {
 
 type loggerConfig struct {
 	DSN string
+}
+
+type dispatcherConfig struct {
+	numWorkers   int
+	jobQueueSize int
 }
 
 func main() {
@@ -65,7 +73,7 @@ func run() error {
 		defer sentry.Flush(2 * time.Second)
 	}
 	logger := newLogger(context.Background(), cfg.env)
-	logger.Info("SLX Service Starting", "env", cfg.env)
+	logger.Info("SLX service starting", "env", cfg.env)
 
 	// main context for graceful shutdown
 	appCtx, stop := signal.NotifyContext(
@@ -94,24 +102,28 @@ func run() error {
 		db.Close()
 		logger.Info("database connection pool closed")
 	}()
-	logger.Info("succesfully connected to sqlserver database")
+	logger.Info("SQL Server database initialized")
 
-	// 	Setup NATS connection
-	if cfg.nats.url == "" {
-		return fmt.Errorf("NATS_URL is not configured")
-	}
-
-	if cfg.nats.creds == "" {
-		return fmt.Errorf("NATS_CREDS is not configured")
-	}
-
+	// Initialize NATS publisher
 	natsconn, err := nats.Connect(cfg.nats.url, nats.UserCredentials(cfg.nats.creds))
 	if err != nil {
 		return fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 	defer natsconn.Close()
-	logger.Info("connected to NATS server", "url", cfg.nats.url)
+	publisher := messaging.NewNatsPublisher(natsconn, logger)
+	defer publisher.Close()
+	logger.Info("NATS publisher initialized")
 
+	// Initialize Dispatcher
+	disp := dispatcher.NewDispatcher(cfg.disp.numWorkers, cfg.disp.jobQueueSize, publisher, logger)
+	disp.Start()
+	defer disp.Stop()
+	logger.Info("dispatcher initialized", "numWorkers", cfg.disp.numWorkers, "jobQueueSize", cfg.disp.jobQueueSize)
+
+	// Register Aggregates
+	// Start ChangeTracking for each aggregate
+
+	logger.Info("SLX service started", "env", cfg.env)
 	go func(logger *slog.Logger, appCtx context.Context) {
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
@@ -128,13 +140,13 @@ func run() error {
 	}(logger, appCtx)
 
 	<-appCtx.Done()
-	logger.Info("shutdown initiated", "signal", "termination")
+	logger.Info("SLX Service shutdown initiated", "signal", "termination")
 
 	// shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	// defer shutdownCancel()
 
 	var shutdownErr error
-	logger.Info("service exiting.")
+	logger.Info("SLX Service exiting.")
 	return shutdownErr
 }
 
@@ -144,6 +156,11 @@ func loadConfig() config {
 	cfg.env = os.Getenv("ENV")
 	if cfg.env == "" {
 		cfg.env = "development"
+	}
+
+	cfg.sentry.DSN = os.Getenv("SENTRY_DSN")
+	if cfg.sentry.DSN == "" && cfg.env != "development" {
+		panic("SENTRY_DSN must be set in non-development environments")
 	}
 
 	cfg.nats.url = os.Getenv("NATS_URL")
@@ -179,6 +196,18 @@ func loadConfig() config {
 		idleTime = 5 * time.Minute
 	}
 	cfg.db.maxIdleTime = idleTime
+
+	numberWorkers, err := strconv.Atoi(os.Getenv("DISPATCHER_NUM_WORKERS"))
+	if err != nil || numberWorkers <= 0 {
+		numberWorkers = 10
+	}
+	cfg.disp.numWorkers = numberWorkers
+
+	jobQueueSize, err := strconv.Atoi(os.Getenv("DISPATCHER_JOB_QUEUE_SIZE"))
+	if err != nil || jobQueueSize <= 0 {
+		jobQueueSize = 100
+	}
+	cfg.disp.jobQueueSize = jobQueueSize
 
 	return cfg
 }
