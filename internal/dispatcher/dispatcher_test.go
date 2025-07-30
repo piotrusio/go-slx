@@ -31,7 +31,7 @@ func (m *mockPublisher) Publish(_ context.Context, _ string, _ *messaging.EventE
 func (m *mockPublisher) Close() error { return nil }
 
 // TestDispatcherProcessesJobs verifies that all dispatched jobs are published.
-func TestDispatcherProcessesJobs(t *testing.T) {
+func TestDispatcher_ProcessesJobs(t *testing.T) {
 	const (
 		numWorkers = 3
 		queueSize  = 10

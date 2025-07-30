@@ -3,6 +3,7 @@ package tracker
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,17 +14,19 @@ import (
 
 // TrackerRepository defines the interface for the tracker repository
 type TrackerRepository interface {
-	// RegisterAggregates registers the names of aggregates in the repository, sets change_version
-	// to 0. If Aggregate exists, it will not be registered again, if exiisting aggregate is not in
-	// the list, it will be removed
+	// RegisterAggregates registers the names of aggregates in the repository and sets change_version
 	RegisterAggregates(ctx context.Context, aggregates []string) error
+	// GetChangeVersion returns the last change version for the given aggregate name
+	GetChangeVersion(ctx context.Context, aggregateName string) (int64, error)
+	// UpdateChangeVersion updates the change version for the given aggregate name
+	UpdateChangeVersion(ctx context.Context, aggregateName string, newVersion int64) error
 }
 
 // Aggregate represents an aggregate with its name and query
 type Aggregate struct {
-	Name         string   `yaml:"name"`
-	Interval     int      `yaml:"interval"`
-	GetQuery     string   `yaml:"get_query"`
+	Name     string `yaml:"name"`
+	Interval int    `yaml:"interval"`
+	GetQuery string `yaml:"get_query"`
 	// InsertCommand string `yaml:"insert_command"`
 	// UpdateCommand string `yaml:"update_command"`
 	// DeleteCommand string `yaml:"delete_command"`
@@ -37,10 +40,11 @@ type Tracker struct {
 	aggregates []Aggregate
 	repository TrackerRepository
 	logger     *slog.Logger
+	db         *sql.DB
 }
 
 func NewTracker(
-	ctx context.Context, aggregatesPath string, repo TrackerRepository, logger *slog.Logger,
+	ctx context.Context, aggregatesPath string, repo TrackerRepository, logger *slog.Logger, db *sql.DB,
 ) (*Tracker, error) {
 	yamlFile, err := os.ReadFile(aggregatesPath)
 	if err != nil {
@@ -51,6 +55,7 @@ func NewTracker(
 	tracker := &Tracker{
 		repository: repo,
 		logger:     logger,
+		db:         db,
 	}
 
 	var config Config
@@ -94,7 +99,7 @@ func (t *Tracker) Start(ctx context.Context) error {
 					t.logger.Info("tracker stopping", "reason", ctx.Err())
 					return
 				case <-ticker.C:
-					// t.runErpChangesCycle(agg)
+					// runErpChangesCycle(agg.Name, agg.GetQuery)
 					t.logger.Debug("running erp cycle for aggregate", "name", agg.Name)
 				}
 			}

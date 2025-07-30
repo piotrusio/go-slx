@@ -5,12 +5,15 @@ go 1.23.0
 toolchain go1.23.11
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/getsentry/sentry-go v0.34.1
 	github.com/getsentry/sentry-go/slog v0.34.1
 	github.com/google/uuid v1.6.0
 	github.com/microsoft/go-mssqldb v1.9.2
 	github.com/nats-io/nats.go v1.44.0
 	github.com/stretchr/testify v1.10.0
+	go.etcd.io/bbolt v1.4.2
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -22,9 +25,7 @@ require (
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	go.etcd.io/bbolt v1.4.2 // indirect
 	golang.org/x/crypto v0.38.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

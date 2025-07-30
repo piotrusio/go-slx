@@ -22,11 +22,11 @@ import (
 )
 
 type config struct {
-	env    string
-	db     dbConfig
-	nats   publisherConfig
-	sentry loggerConfig
-	disp   dispatcherConfig
+	env     string
+	db      dbConfig
+	nats    publisherConfig
+	sentry  loggerConfig
+	disp    dispatcherConfig
 	aggPath string
 }
 
@@ -35,7 +35,7 @@ type dbConfig struct {
 	maxOpenConns int
 	maxIdleConns int
 	maxIdleTime  time.Duration
-	path		 string
+	path         string
 }
 
 type publisherConfig struct {
@@ -133,7 +133,7 @@ func run() error {
 	defer repo.Close()
 
 	// Initialize Tracker
-	trackerInstance, err := tracker.NewTracker(startupCtx, cfg.aggPath, repo, logger)
+	trackerInstance, err := tracker.NewTracker(startupCtx, cfg.aggPath, repo, logger, db.Pool)
 	if err != nil {
 		logger.Error("failed to initialize tracker", "error", err)
 		return fmt.Errorf("failed to initialize tracker: %w", err)

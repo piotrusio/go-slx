@@ -9,13 +9,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type mockTrackerRepository struct {
-	RegisterAggregatesCalled bool
-	errToReturn              error
+	RegisterAggregatesCalled  bool
+	GetChangeVersionCalled    bool
+	UpdateChangeVersionCalled bool
+	errToReturn               error
 }
 
 func (m *mockTrackerRepository) RegisterAggregates(ctx context.Context, aggregates []string) error {
@@ -26,8 +29,33 @@ func (m *mockTrackerRepository) RegisterAggregates(ctx context.Context, aggregat
 	return nil
 }
 
+func (m *mockTrackerRepository) GetChangeVersion(
+	ctx context.Context, aggregateName string,
+) (int64, error) {
+	if m.errToReturn != nil {
+		return 0, m.errToReturn
+	}
+	m.GetChangeVersionCalled = true
+	return 1, nil
+}
+
+func (m *mockTrackerRepository) UpdateChangeVersion(
+	ctx context.Context, aggregateName string, newVersion int64,
+) error {
+	if m.errToReturn != nil {
+		return m.errToReturn
+	}
+	m.UpdateChangeVersionCalled = true
+	return nil
+}
+
 func TestTracker_NewTracker_HappyPath(t *testing.T) {
 	// --- Arrange ---
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+	defer db.Close()
 	trackerRepo := &mockTrackerRepository{}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
@@ -49,12 +77,12 @@ func TestTracker_NewTracker_HappyPath(t *testing.T) {
       FROM CHANGETABLE(CHANGES ERPXL_GO.CDN.KntKarty, @version) AS c
 `
 
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
+	err = os.WriteFile(testFile, []byte(testContent), 0644)
 	if err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	tracker, err := NewTracker(ctx, testFile, trackerRepo, logger)
+	tracker, err := NewTracker(ctx, testFile, trackerRepo, logger, db)
 	require.NoError(t, err, "NewTracker should not return an error")
 
 	// --- Assert ---
@@ -81,6 +109,11 @@ func TestTracker_NewTracker_HappyPath(t *testing.T) {
 // TestTracker_NewTracker_InvalidFile tests the error handling when the aggregates file is invalid.
 func TestTracker_NewTracker_InvalidFile(t *testing.T) {
 	// --- Arrange ---
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+	defer db.Close()
 	trackerRepo := &mockTrackerRepository{}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
@@ -94,13 +127,13 @@ func TestTracker_NewTracker_InvalidFile(t *testing.T) {
     extra_field: "unexpected"  # This should cause an error
 `
 
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
+	err = os.WriteFile(testFile, []byte(testContent), 0644)
 	if err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
 	// --- Act ---
-	tracker, err := NewTracker(ctx, testFile, trackerRepo, logger)
+	tracker, err := NewTracker(ctx, testFile, trackerRepo, logger, db)
 
 	// --- Assert ---
 	assert.Nil(t, tracker, "changeTracker should be nil")
@@ -117,14 +150,14 @@ func TestTracker_Start_TrackErpChanges(t *testing.T) {
 	tracker := &Tracker{
 		aggregates: []Aggregate{
 			{
-				Name:         "fabric",
-				Interval:     1,
-				GetQuery:     "SELECT * FROM ERPXL_GO.CDN.TwrKarty",
+				Name:     "fabric",
+				Interval: 1,
+				GetQuery: "SELECT * FROM ERPXL_GO.CDN.TwrKarty",
 			},
 			{
-				Name:         "customer",
-				Interval:     1,
-				GetQuery:     "SELECT * FROM ERPXL_GO.CDN.KntKarty",
+				Name:     "customer",
+				Interval: 1,
+				GetQuery: "SELECT * FROM ERPXL_GO.CDN.KntKarty",
 			},
 		},
 		repository: trackerRepo,
