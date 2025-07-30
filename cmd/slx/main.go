@@ -15,6 +15,8 @@ import (
 	"gworks.dev/slx/internal/database"
 	"gworks.dev/slx/internal/dispatcher"
 	"gworks.dev/slx/internal/messaging"
+	"gworks.dev/slx/internal/repository"
+	"gworks.dev/slx/internal/tracker"
 
 	sentryslog "github.com/getsentry/sentry-go/slog"
 )
@@ -25,6 +27,7 @@ type config struct {
 	nats   publisherConfig
 	sentry loggerConfig
 	disp   dispatcherConfig
+	aggPath string
 }
 
 type dbConfig struct {
@@ -32,6 +35,7 @@ type dbConfig struct {
 	maxOpenConns int
 	maxIdleConns int
 	maxIdleTime  time.Duration
+	path		 string
 }
 
 type publisherConfig struct {
@@ -121,23 +125,25 @@ func run() error {
 	logger.Info("dispatcher initialized", "numWorkers", cfg.disp.numWorkers, "jobQueueSize", cfg.disp.jobQueueSize)
 
 	// Register Aggregates
-	// Start ChangeTracking for each aggregate
+	repo, err := repository.NewBBoltRepository(cfg.db.path, logger)
+	if err != nil {
+		logger.Error("failed to initialize repository", "error", err)
+		return fmt.Errorf("failed to initialize repository: %w", err)
+	}
+	defer repo.Close()
 
-	logger.Info("SLX service started", "env", cfg.env)
-	go func(logger *slog.Logger, appCtx context.Context) {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-appCtx.Done():
-				logger.Info("app context done, stopping ticker")
-				return
-			case <-ticker.C:
-				logger.Info("ticker ticked", "time", time.Now().Format(time.RFC3339))
-			}
-		}
-	}(logger, appCtx)
+	// Initialize Tracker
+	trackerInstance, err := tracker.NewTracker(startupCtx, cfg.aggPath, repo, logger)
+	if err != nil {
+		logger.Error("failed to initialize tracker", "error", err)
+		return fmt.Errorf("failed to initialize tracker: %w", err)
+	}
+	err = trackerInstance.Start(appCtx)
+	if err != nil {
+		logger.Error("failed to start tracker", "error", err)
+		return fmt.Errorf("failed to start tracker: %w", err)
+	}
+	logger.Info("tracker started")
 
 	<-appCtx.Done()
 	logger.Info("SLX Service shutdown initiated", "signal", "termination")
@@ -208,6 +214,16 @@ func loadConfig() config {
 		jobQueueSize = 100
 	}
 	cfg.disp.jobQueueSize = jobQueueSize
+
+	cfg.db.path = os.Getenv("DB_PATH")
+	if cfg.db.path == "" {
+		cfg.db.path = "./.data/bbolt.db"
+	}
+
+	cfg.aggPath = os.Getenv("AGG_PATH")
+	if cfg.aggPath == "" {
+		cfg.aggPath = "./aggregates.yaml"
+	}
 
 	return cfg
 }

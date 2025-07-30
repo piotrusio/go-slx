@@ -1,10 +1,12 @@
 aggregates:
   - name: "fabric"
+    interval: 10
     get_query: |
       SELECT *
       FROM CHANGETABLE(CHANGES ERPXL_GO.CDN.TwrKarty, @version) AS c
 
   - name: "customer"
+    interval: 10
     get_query: |
       SELECT *
       FROM CHANGETABLE(CHANGES ERPXL_GO.CDN.KntKarty, @version) AS c

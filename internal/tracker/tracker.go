@@ -6,17 +6,24 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
+// TrackerRepository defines the interface for the tracker repository
 type TrackerRepository interface {
+	// RegisterAggregates registers the names of aggregates in the repository, sets change_version
+	// to 0. If Aggregate exists, it will not be registered again, if exiisting aggregate is not in
+	// the list, it will be removed
 	RegisterAggregates(ctx context.Context, aggregates []string) error
 }
 
+// Aggregate represents an aggregate with its name and query
 type Aggregate struct {
-	Name     string `yaml:"name"`
-	GetQuery string `yaml:"get_query"`
+	Name         string   `yaml:"name"`
+	Interval     int      `yaml:"interval"`
+	GetQuery     string   `yaml:"get_query"`
 	// InsertCommand string `yaml:"insert_command"`
 	// UpdateCommand string `yaml:"update_command"`
 	// DeleteCommand string `yaml:"delete_command"`
@@ -28,6 +35,7 @@ type Config struct {
 
 type Tracker struct {
 	aggregates []Aggregate
+	repository TrackerRepository
 	logger     *slog.Logger
 }
 
@@ -41,7 +49,8 @@ func NewTracker(
 	}
 
 	tracker := &Tracker{
-		logger: logger,
+		repository: repo,
+		logger:     logger,
 	}
 
 	var config Config
@@ -62,7 +71,7 @@ func NewTracker(
 		aggregateNames[i] = aggregate.Name
 	}
 
-	err = repo.RegisterAggregates(ctx, aggregateNames)
+	err = tracker.repository.RegisterAggregates(ctx, aggregateNames)
 	if err != nil {
 		logger.Error("failed to save aggregates", "error", err)
 		return nil, fmt.Errorf("failed to save aggregates: %w", err)
@@ -72,8 +81,40 @@ func NewTracker(
 	return tracker, nil
 }
 
-// start() will start goroutines for each aggregate
-// - validate if aggregate name is registered -> table called
-// - validate if change_tracking is enabled -> tables used in query
-// - provide for each goroutine separate interval
-// - provide for each goroutine Aggregate struct with its own parameteres
+func (t *Tracker) Start(ctx context.Context) error {
+	for _, aggregate := range t.aggregates {
+
+		// Start a goroutine for each aggregate to run erp changes cycle
+		go func(ctx context.Context, agg Aggregate) {
+			ticker := time.NewTicker(time.Duration(agg.Interval) * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					t.logger.Info("tracker stopping", "reason", ctx.Err())
+					return
+				case <-ticker.C:
+					// t.runErpChangesCycle(agg)
+					t.logger.Debug("running erp cycle for aggregate", "name", agg.Name)
+				}
+			}
+		}(ctx, aggregate)
+
+		// Start a goroutine for each aggregate to run app changes cycle
+		go func(ctx context.Context, agg Aggregate) {
+			ticker := time.NewTicker(time.Duration(agg.Interval) * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					t.logger.Info("tracker stopping", "reason", ctx.Err())
+					return
+				case <-ticker.C:
+					// t.runAppChangesCycle(agg)
+					t.logger.Debug("running app cycle for aggregate", "name", agg.Name)
+				}
+			}
+		}(ctx, aggregate)
+	}
+	return nil
+}
