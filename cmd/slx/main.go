@@ -133,7 +133,7 @@ func run() error {
 	defer repo.Close()
 
 	// Initialize Tracker
-	trackerInstance, err := tracker.NewTracker(startupCtx, cfg.aggPath, repo, logger, db.Pool)
+	trackerInstance, err := tracker.NewTracker(startupCtx, cfg.aggPath, repo, logger, db.Pool, disp)
 	if err != nil {
 		logger.Error("failed to initialize tracker", "error", err)
 		return fmt.Errorf("failed to initialize tracker: %w", err)
@@ -182,7 +182,7 @@ func loadConfig() config {
 	cfg.db.uri = os.Getenv("SQLSERVER_URI")
 	if cfg.db.uri == "" {
 		// Default to local SQL Server for development
-		cfg.db.uri = "sqlserver://sa:SalesW0rk5@localhost:1433?database=GOWORKS&trustServerCertificate=true"
+		cfg.db.uri = "sqlserver://sa:SalesW0rk5@localhost:1433?database=ERPXL_GO&trustServerCertificate=true"
 	}
 
 	openConns, _ := strconv.Atoi(os.Getenv("DB_MAX_OPEN_CONNS"))

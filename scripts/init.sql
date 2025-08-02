@@ -1,29 +1,8 @@
-IF NOT EXISTS (SELECT name FROM master.dbo.sysdatabases WHERE name = 'GOWORKS')
-BEGIN
-  CREATE DATABASE GOWORKS;
-END
-GO
-
 IF NOT EXISTS (SELECT name FROM master.dbo.sysdatabases WHERE name = 'ERPXL_GO')
 BEGIN
   CREATE DATABASE ERPXL_GO;
 END
 GO
-
-USE GOWORKS;
-GO
-
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.change_tracking_tables') 
-         AND type in (N'U'))
-BEGIN
-  CREATE TABLE dbo.change_tracking_tables (
-    aggregate_type NVARCHAR(50) NOT NULL,
-    aggregate_source_table NVARCHAR(255) NOT NULL,
-    last_change_version BIGINT NOT NULL DEFAULT 0,
-    is_active BIT NOT NULL DEFAULT 1,
-    CONSTRAINT PK_aggregate_source_tables PRIMARY KEY CLUSTERED (aggregate_type, aggregate_source_table)
-  )
-END
 
 USE ERPXL_GO;
 GO

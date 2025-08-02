@@ -4,20 +4,20 @@ WITH changetracking_changes AS (
 		c.SYS_CHANGE_OPERATION as change_operation,
 		c.SYS_CHANGE_VERSION as change_version,
 		c.Knt_GidNumer as customer_id
-	FROM CHANGETABLE(CHANGES ERPXL_GO.CDN.KntKarty, @version) AS c
+	FROM CHANGETABLE(CHANGES CDN.KntKarty, @version) AS c
 	UNION
 	SELECT
 		c.SYS_CHANGE_OPERATION,
 		c.SYS_CHANGE_VERSION,
 		a.KnA_KntNumer
-	FROM CHANGETABLE(CHANGES ERPXL_GO.CDN.KntAdresy, @version) AS c
-		JOIN ERPXL_GO.CDN.KntAdresy a ON c.KnA_GidNumer = a.KnA_GIDNumer
+	FROM CHANGETABLE(CHANGES CDN.KntAdresy, @version) AS c
+		JOIN CDN.KntAdresy a ON c.KnA_GidNumer = a.KnA_GIDNumer
 	UNION
 	SELECT
 		c.SYS_CHANGE_OPERATION,
 		c.SYS_CHANGE_VERSION,
 		c.KnS_KntNumer
-	FROM CHANGETABLE(CHANGES ERPXL_GO.CDN.KntOsoby, @version) AS c
+	FROM CHANGETABLE(CHANGES CDN.KntOsoby, @version) AS c
 ), customers AS (
 	SELECT
 		customer_id,
@@ -30,14 +30,14 @@ WITH changetracking_changes AS (
 )
 -- delete operations does not have aggregate_data
 SELECT
-	CASE c.change_operation
-		WHEN 'I' THEN 'created'
-		WHEN 'U' THEN 'updated'
-		WHEN 'D' THEN 'deleted'
-	END AS change_operation,
+	c.change_operation,
 	c.change_version,
 	CONVERT(VARCHAR(32), HASHBYTES('MD5', CAST(c.customer_id AS VARCHAR(40))), 2) AS aggregate_key,
-	'{}' as payload
+	JSON_QUERY((
+		SELECT
+      c.customer_id
+		FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+	)) AS payload
 FROM customers AS c
 WHERE c.change_operation = 'D'
 
@@ -49,6 +49,7 @@ SELECT
 	CONVERT(VARCHAR(32), HASHBYTES('MD5', CAST(c.customer_id AS VARCHAR(40))), 2) AS aggregate_key,
 	JSON_QUERY((
 		SELECT
+      c.customer_id,
 			k.knt_akronim as customer_code,
 			e.KGD_Kod as customer_group,
 			UPPER(COALESCE(NULLIF(TRIM(CONCAT_WS(' ', p.prc_imie1, p.prc_nazwisko)), ''), 'N/D')) AS customer_owner,        
@@ -76,7 +77,7 @@ SELECT
 					a.kna_modem as adress_mode,
 					a.kna_telex as adress_gsm,
 					a.kna_email as adress_email
-				FROM ERPXL_GO.CDN.KntAdresy a
+				FROM CDN.KntAdresy a
 				WHERE a.KnA_KntNumer = k.Knt_GIDNumer AND a.kna_dataarc = 0
 				FOR JSON PATH
 			)) AS adresses,
@@ -88,7 +89,7 @@ SELECT
 					o.kns_email as email,
 					o.kns_telefon as phone,
 					o.kns_telefonk as mobile
-				FROM ERPXL_GO.CDN.KntOsoby o
+				FROM CDN.KntOsoby o
 				WHERE k.Knt_GIDNumer = o.KnS_KntNumer AND o.kns_archiwalny = 0
 				FOR JSON PATH
 			)) AS contacts,
@@ -99,7 +100,7 @@ SELECT
 					DATEADD(DAY, o.klk_datado, '1800-12-28') as valid_to,
 					o.klk_maxlimitwart as credit_value,
 					o.klk_waluta as credit_currency
-				FROM ERPXL_GO.CDN.KntLimityK o
+				FROM CDN.KntLimityK o
 				WHERE k.Knt_GIDNumer = o.Klk_KntNumer
 					AND o.klk_datado > DATEDIFF(DAY, '1800-12-28', GETDATE())
 				FOR JSON PATH
@@ -107,9 +108,9 @@ SELECT
 		FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
 	)) AS payload
 FROM customers AS c
-	JOIN ERPXL_GO.CDN.KntKarty AS k ON c.customer_id = k.knt_gidnumer
-	JOIN ERPXL_GO.CDN.KntGrupyDom d ON k.knt_gidnumer = d.kgd_gidnumer AND d.kgd_gidtyp = k.knt_gidtyp
-	JOIN ERPXL_GO.CDN.KntGrupyDom e ON d.kgd_grotyp = e.kgd_gidtyp AND d.kgd_gronumer = e.kgd_gidnumer
-	LEFT JOIN ERPXL_GO.CDN.KntOpiekun o ON k.knt_gidnumer = o.kto_kntnumer AND k.knt_gidtyp = o.kto_knttyp
-	LEFT JOIN ERPXL_GO.CDN.PrcKarty p ON o.kto_prcnumer = p.prc_gidnumer
-	LEFT JOIN ERPXL_GO.CDN.Nazwy n ON k.knt_cena = n.naz_gidlp AND n.naz_gidtyp = 64;
+	JOIN CDN.KntKarty AS k ON c.customer_id = k.knt_gidnumer
+	JOIN CDN.KntGrupyDom d ON k.knt_gidnumer = d.kgd_gidnumer AND d.kgd_gidtyp = k.knt_gidtyp
+	JOIN CDN.KntGrupyDom e ON d.kgd_grotyp = e.kgd_gidtyp AND d.kgd_gronumer = e.kgd_gidnumer
+	LEFT JOIN CDN.KntOpiekun o ON k.knt_gidnumer = o.kto_kntnumer AND k.knt_gidtyp = o.kto_knttyp
+	LEFT JOIN CDN.PrcKarty p ON o.kto_prcnumer = p.prc_gidnumer
+	LEFT JOIN CDN.Nazwy n ON k.knt_cena = n.naz_gidlp AND n.naz_gidtyp = 64;

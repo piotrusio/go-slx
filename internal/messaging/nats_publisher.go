@@ -41,11 +41,10 @@ func (p *NatsPublisher) Publish(ctx context.Context, subject string, envelope *E
 		return fmt.Errorf("failed to publish message to subject '%s': %w", subject, err)
 	}
 
-	p.logger.Info(
+	p.logger.Debug(
 		"message published to NATS",
 		"subject", subject,
 		"event_type", envelope.EventType,
-		"aggregate_type", envelope.AggregateType,
 		"aggregate_key", envelope.AggregateKey,
 	)
 

@@ -48,15 +48,14 @@ func TestDispatcher_ProcessesJobs(t *testing.T) {
 	d.Start()
 
 	event := messaging.NewEventEnvelope(
-		"test.event",
-		"test-aggregate-id",
-		"test-aggregate-type",
+		"test.created",
+		"C4CA4238A0B923820DCC509A6F75849A",
 		1,
-		"test payload",
+		"{}",
 	)
 	// Dispatch jobs.
 	for i := 0; i < numJobs; i++ {
-		d.Dispatch(Job{EventChannel: "test.event", EventEnvelope: event})
+		d.Dispatch(Job{EventChannel: "test", EventEnvelope: event})
 	}
 
 	// Wait for all jobs or timeout.

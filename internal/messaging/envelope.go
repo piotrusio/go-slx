@@ -11,10 +11,9 @@ import (
 type EventEnvelope struct {
 	EventID       string      `json:"event_id"`
 	EventType     string      `json:"event_type"`
-	AggregateKey  string      `json:"aggregate_key"`
-	AggregateType string      `json:"aggregate_type"`
-	ChangeVersion int64       `json:"change_version"`
 	EventVersion  int         `json:"event_version"`
+	AggregateKey  string      `json:"aggregate_key"`
+	ChangeVersion int64       `json:"change_version"`
 	Timestamp     time.Time   `json:"timestamp"`
 	CorrelationID string      `json:"correlation_id,omitempty"`
 	CausationID   string      `json:"causation_id,omitempty"`
@@ -47,7 +46,7 @@ func WithUserID(userID string) EnvelopeOption {
 }
 
 func NewEventEnvelope(
-	eventType, aggregateKey, aggregateType string, changeVersion int64,
+	eventType, aggregateKey string, changeVersion int64,
 	payload interface{}, options ...EnvelopeOption,
 ) *EventEnvelope {
 	envelope := &EventEnvelope{
@@ -55,7 +54,6 @@ func NewEventEnvelope(
 		EventType:     eventType,
 		EventVersion:  1,
 		AggregateKey:  aggregateKey,
-		AggregateType: aggregateType,
 		ChangeVersion: changeVersion,
 		Timestamp:     time.Now(),
 		Payload:       payload,
@@ -76,9 +74,6 @@ func (e *EventEnvelope) Validate() error {
 	}
 	if e.AggregateKey == "" {
 		return errors.New("aggregate Key is required")
-	}
-	if e.AggregateType == "" {
-		return errors.New("aggregate type is required")
 	}
 	if e.Payload == nil {
 		return errors.New("payload is required")

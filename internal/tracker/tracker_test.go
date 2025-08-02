@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"regexp"
 	"runtime"
 	"testing"
 	"time"
@@ -12,7 +13,30 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gworks.dev/slx/internal/dispatcher"
+	"gworks.dev/slx/internal/messaging"
 )
+
+type mockPublisher struct {
+	PublishCalled bool
+	PublishCalls  int
+	errToReturn   error
+}
+
+func (m *mockPublisher) Publish(
+	ctx context.Context, subject string, envelope *messaging.EventEnvelope,
+) error {
+	if m.errToReturn != nil {
+		return m.errToReturn
+	}
+	m.PublishCalled = true
+	m.PublishCalls++
+	return nil
+}
+
+func (m *mockPublisher) Close() error {
+	return nil
+}
 
 type mockTrackerRepository struct {
 	RegisterAggregatesCalled  bool
@@ -49,6 +73,7 @@ func (m *mockTrackerRepository) UpdateChangeVersion(
 	return nil
 }
 
+// 
 func TestTracker_NewTracker_HappyPath(t *testing.T) {
 	// --- Arrange ---
 	db, _, err := sqlmock.New()
@@ -56,6 +81,7 @@ func TestTracker_NewTracker_HappyPath(t *testing.T) {
 		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
 	}
 	defer db.Close()
+	publisher := &mockPublisher{}
 	trackerRepo := &mockTrackerRepository{}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
@@ -82,7 +108,8 @@ func TestTracker_NewTracker_HappyPath(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	tracker, err := NewTracker(ctx, testFile, trackerRepo, logger, db)
+	dispatcher := dispatcher.NewDispatcher(1, 10, publisher, logger)
+	tracker, err := NewTracker(ctx, testFile, trackerRepo, logger, db, dispatcher)
 	require.NoError(t, err, "NewTracker should not return an error")
 
 	// --- Assert ---
@@ -114,6 +141,7 @@ func TestTracker_NewTracker_InvalidFile(t *testing.T) {
 		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
 	}
 	defer db.Close()
+	publisher := &mockPublisher{}
 	trackerRepo := &mockTrackerRepository{}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
@@ -133,7 +161,8 @@ func TestTracker_NewTracker_InvalidFile(t *testing.T) {
 	}
 
 	// --- Act ---
-	tracker, err := NewTracker(ctx, testFile, trackerRepo, logger, db)
+	dispatcher := dispatcher.NewDispatcher(1, 10, publisher, logger)
+	tracker, err := NewTracker(ctx, testFile, trackerRepo, logger, db, dispatcher)
 
 	// --- Assert ---
 	assert.Nil(t, tracker, "changeTracker should be nil")
@@ -142,11 +171,18 @@ func TestTracker_NewTracker_InvalidFile(t *testing.T) {
 
 func TestTracker_Start_TrackErpChanges(t *testing.T) {
 	// --- Arrange ---
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+	defer db.Close()
+	publisher := &mockPublisher{}
 	trackerRepo := &mockTrackerRepository{}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
+	dispatcher := dispatcher.NewDispatcher(1, 10, publisher, logger)
 	tracker := &Tracker{
 		aggregates: []Aggregate{
 			{
@@ -162,11 +198,13 @@ func TestTracker_Start_TrackErpChanges(t *testing.T) {
 		},
 		repository: trackerRepo,
 		logger:     logger,
+		db:         db,
+		dispatcher: dispatcher,
 	}
 
 	// --- Act ---
 	initialCount := runtime.NumGoroutine()
-	err := tracker.Start(ctx)
+	err = tracker.Start(ctx)
 	require.NoError(t, err, "Start should not return an error")
 	// Allow some time for goroutines to start
 	time.Sleep(100 * time.Millisecond)
@@ -180,4 +218,117 @@ func TestTracker_Start_TrackErpChanges(t *testing.T) {
 		t, expectedIncrease, actualIncrease,
 		"expected goroutines to increase by %d, got %d", expectedIncrease, actualIncrease,
 	)
+}
+
+func TestTracker_RunErpCycle(t *testing.T) {
+	// --- Arrange ---
+	publisher := &mockPublisher{}
+	trackerRepo := &mockTrackerRepository{}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+
+	dispatcher := dispatcher.NewDispatcher(1, 10, publisher, logger)
+	tracker := &Tracker{
+		aggregates: []Aggregate{{Name: "fabric"}, {Name: "customer"}},
+		repository: trackerRepo,
+		logger:     logger,
+		db:         db,
+		dispatcher: dispatcher,
+	}
+	query := "SELECT * FROM changes WHERE version > @version"
+	// version := int64(0)
+
+	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(sqlmock.AnyArg()).WillReturnRows(
+		sqlmock.NewRows([]string{"change_operation", "change_version", "aggregate_key", "payload"}).
+			AddRow("I", 1, "C4CA4238A0B923820DCC509A6F75849A", `{}`).
+			AddRow("U", 1, "C4CA4238A0B923820DCC509A6F75849B", `{}`).
+			AddRow("D", 1, "C4CA4238A0B923820DCC509A6F75849C", `{}`),
+	)
+	// --- Act ---
+	err = tracker.runErpCycle(ctx, "fabric", query)
+	require.NoError(t, err, "runErpCycle should start without error")
+
+	// --- Assert ---
+	assert.True(t, trackerRepo.GetChangeVersionCalled, "GetChangeVersion should be called")
+	assert.True(t, trackerRepo.UpdateChangeVersionCalled, "UpdateChangeVersion should not be called")
+}
+
+func TestTracker_FetchErpChanges(t *testing.T) {
+	// --- Arrange ---
+	publisher := &mockPublisher{}
+	trackerRepo := &mockTrackerRepository{}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	dispatcher := dispatcher.NewDispatcher(1, 10, publisher, logger)
+	tracker := &Tracker{
+		aggregates: []Aggregate{{Name: "fabric"}, {Name: "customer"}},
+		repository: trackerRepo,
+		logger:     logger,
+		db:         db,
+		dispatcher: dispatcher,
+	}
+	query := "SELECT * FROM changes WHERE version > @version"
+	version := int64(0)
+
+	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(sqlmock.AnyArg()).WillReturnRows(
+		sqlmock.NewRows([]string{"change_operation", "change_version", "aggregate_key", "payload"}).
+			AddRow("I", 1, "C4CA4238A0B923820DCC509A6F75849A", `{}`).
+			AddRow("U", 1, "C4CA4238A0B923820DCC509A6F75849B", `{}`).
+			AddRow("D", 1, "C4CA4238A0B923820DCC509A6F75849C", `{}`),
+	)
+
+	// trackerRepo := &mockTrackerRepository{}
+	// logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+
+	// --- Act ---
+	counter, ver, err := tracker.fetchErpChanges(ctx, tracker.aggregates[0].Name, query, version)
+	require.NoError(t, err, "runErpCycle should start without error")
+
+	// --- Assert ---
+	assert.Equal(t, counter, 3, "fetchErpChanges should return 3 change events")
+	assert.Equal(t, int64(1), ver, "fetchErpChanges should return new version 1")
+}
+
+func TestTracker_ErpDispatcher(t *testing.T) {
+	// --- Arrange ---
+	publisher := &mockPublisher{}
+	trackerRepo := &mockTrackerRepository{}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	dispatcher := dispatcher.NewDispatcher(1, 10, publisher, logger)
+
+	tracker := &Tracker{
+		aggregates:  []Aggregate{{Name: "fabric"}, {Name: "customer"}},
+		repository:  trackerRepo,
+		logger:      logger,
+		dispatcher:  dispatcher,
+	}
+
+	correctEvent := ChangeEvent{
+		ChangeOperation: "created",
+		ChangeVersion: 1,
+		AggregateKey: "C4CA4238A0B923820DCC509A6F75849A",
+		Payload: `{}`,
+	}
+
+	corruptedEvent := ChangeEvent{}
+
+	// --- Act & Assert ---
+	err := tracker.dispatchErpChange(correctEvent, "test")
+	require.NoError(t, err)
+
+	err = tracker.dispatchErpChange(corruptedEvent, "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid event envelope")
 }
