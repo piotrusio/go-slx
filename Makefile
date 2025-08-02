@@ -15,7 +15,7 @@ stop:
 	docker compose down
 
 run:
-	go run cmd/slx/main.go
+	go run -race cmd/slx/main.go
 
 test:
 	go test -v ./...

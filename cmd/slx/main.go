@@ -10,22 +10,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/getsentry/sentry-go"
 	"github.com/nats-io/nats.go"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"gworks.dev/slx/internal/database"
 	"gworks.dev/slx/internal/dispatcher"
 	"gworks.dev/slx/internal/messaging"
 	"gworks.dev/slx/internal/repository"
 	"gworks.dev/slx/internal/tracker"
-
-	sentryslog "github.com/getsentry/sentry-go/slog"
 )
 
 type config struct {
 	env     string
 	db      dbConfig
 	nats    publisherConfig
-	sentry  loggerConfig
+	log     loggerConfig
 	disp    dispatcherConfig
 	aggPath string
 }
@@ -44,7 +42,11 @@ type publisherConfig struct {
 }
 
 type loggerConfig struct {
-	DSN string
+    Filename   string
+    MaxSize    int
+    MaxBackups int
+    MaxAge     int
+    Compress   bool
 }
 
 type dispatcherConfig struct {
@@ -62,25 +64,7 @@ func main() {
 func run() error {
 	cfg := loadConfig()
 
-	// Initialize Sentry SDK for non-development environments
-	if cfg.env != "development" && cfg.sentry.DSN != "" {
-		err := sentry.Init(sentry.ClientOptions{
-			Dsn:        cfg.sentry.DSN,
-			EnableLogs: true,
-			MaxBreadcrumbs: 100,
-			AttachStacktrace: true,
-			// Ensure transport is configured properly
-			Transport: sentry.NewHTTPTransport(),
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "sentry.Init: %s", err)
-			os.Exit(1)
-		}
-		// Flush buffered events before the program terminates.
-		// Set the timeout to the maximum duration the program can afford to wait.
-		defer sentry.Flush(2 * time.Second)
-	}
-	logger := newLogger(context.Background(), cfg.env)
+	logger := newLogger(context.Background(), cfg.env, cfg.log)
 	logger.Info("SLX service starting", "env", cfg.env)
 
 	// main context for graceful shutdown
@@ -168,10 +152,31 @@ func loadConfig() config {
 		cfg.env = "development"
 	}
 
-	cfg.sentry.DSN = os.Getenv("SENTRY_DSN")
-	if cfg.sentry.DSN == "" && cfg.env != "development" {
-		panic("SENTRY_DSN must be set in non-development environments")
-	}
+	cfg.log.Filename = os.Getenv("LOG_FILENAME")
+    if cfg.log.Filename == "" {
+        cfg.log.Filename = "./.logs/slx.log"
+    }
+
+    maxSize, _ := strconv.Atoi(os.Getenv("LOG_MAX_SIZE"))
+    if maxSize == 0 {
+        maxSize = 100 // 100 MB
+    }
+    cfg.log.MaxSize = maxSize
+
+    maxBackups, _ := strconv.Atoi(os.Getenv("LOG_MAX_BACKUPS"))
+    if maxBackups == 0 {
+        maxBackups = 3
+    }
+    cfg.log.MaxBackups = maxBackups
+
+    maxAge, _ := strconv.Atoi(os.Getenv("LOG_MAX_AGE"))
+    if maxAge == 0 {
+        maxAge = 28 // days
+    }
+    cfg.log.MaxAge = maxAge
+
+    compress := os.Getenv("LOG_COMPRESS")
+    cfg.log.Compress = compress == "true"
 
 	cfg.nats.url = os.Getenv("NATS_URL")
 	if cfg.nats.url == "" {
@@ -232,18 +237,23 @@ func loadConfig() config {
 	return cfg
 }
 
-func newLogger(ctx context.Context, env string) *slog.Logger {
+func newLogger(ctx context.Context, env string, logCfg loggerConfig) *slog.Logger {
 	var handler slog.Handler
-	if env != "development" {
-		handler = sentryslog.Option{
-			// Only Error level will be sent as events
-			EventLevel: []slog.Level{slog.LevelError},
-			// Only Warn and Info levels will be sent as logs
-			LogLevel: []slog.Level{slog.LevelWarn, slog.LevelInfo},
-		}.NewSentryHandler(ctx)
-	} else {
-		// Default to console for development or if no log file is specified.
+
+	if env == "development" {
 		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
+	} else {
+		lumberjackLogger := &lumberjack.Logger{
+			Filename:   logCfg.Filename,
+			MaxSize:    logCfg.MaxSize,
+			MaxBackups: logCfg.MaxBackups,
+			MaxAge:     logCfg.MaxAge,
+			Compress:   logCfg.Compress,
+		}
+
+		handler = slog.NewTextHandler(lumberjackLogger, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		})
 	}
 	return slog.New(handler)
 }
