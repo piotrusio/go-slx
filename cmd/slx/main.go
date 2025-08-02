@@ -67,6 +67,10 @@ func run() error {
 		err := sentry.Init(sentry.ClientOptions{
 			Dsn:        cfg.sentry.DSN,
 			EnableLogs: true,
+			MaxBreadcrumbs: 100,
+			AttachStacktrace: true,
+			// Ensure transport is configured properly
+			Transport: sentry.NewHTTPTransport(),
 		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "sentry.Init: %s", err)

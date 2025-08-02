@@ -3807,3 +3807,83 @@ ALTER TABLE [CDN].[ZamNag] ADD  CONSTRAINT [DF_ZaN_EAN]  DEFAULT ('') FOR [ZaN_E
 GO
 ALTER TABLE [CDN].[ZamNag] ADD  CONSTRAINT [DF_ZaN_PsAID]  DEFAULT ((0)) FOR [ZaN_PsAID]
 GO
+CREATE TABLE [CDN].[TwrZasoby](
+	[TwZ_DstTyp] [smallint] NULL,
+	[TwZ_DstFirma] [int] NULL,
+	[TwZ_DstNumer] [int] NOT NULL,
+	[TwZ_DstLp] [smallint] NULL,
+	[TwZ_TwrTyp] [smallint] NULL,
+	[TwZ_TwrFirma] [int] NULL,
+	[TwZ_TwrNumer] [int] NULL,
+	[TwZ_TwrLp] [smallint] NULL,
+	[TwZ_MagTyp] [smallint] NULL,
+	[TwZ_MagFirma] [int] NULL,
+	[TwZ_MagNumer] [int] NOT NULL,
+	[TwZ_MagLp] [smallint] NULL,
+	[TwZ_DataP] [int] NULL,
+	[TwZ_KsiegowaNetto] [decimal](15, 2) NULL,
+	[TwZ_RzeczywistaNetto] [decimal](15, 2) NULL,
+	[TwZ_Ean] [varchar](40) NULL,
+	[TwZ_Polozenie] [varchar](64) NULL,
+	[TwZ_DataW] [int] NULL,
+	[TwZ_KosztKsiegowy] [decimal](15, 2) NULL,
+	[TwZ_KosztRzeczywisty] [decimal](15, 2) NULL,
+	[TwZ_IlSpr] [decimal](15, 4) NULL,
+	[TwZ_IlMag] [decimal](15, 4) NULL,
+	[TwZ_Ilosc] [decimal](15, 4) NULL,
+	[TwZ_IloscWMS] [decimal](15, 4) NULL,
+ CONSTRAINT [TwZ_Primary] PRIMARY KEY CLUSTERED 
+(
+	[TwZ_DstNumer] ASC,
+	[TwZ_MagNumer] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_DstTyp]  DEFAULT ((0)) FOR [TwZ_DstTyp]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_DstFirma]  DEFAULT ((0)) FOR [TwZ_DstFirma]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_DstNumer]  DEFAULT ((0)) FOR [TwZ_DstNumer]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_DstLp]  DEFAULT ((0)) FOR [TwZ_DstLp]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_TwrTyp]  DEFAULT ((0)) FOR [TwZ_TwrTyp]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_TwrFirma]  DEFAULT ((0)) FOR [TwZ_TwrFirma]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_TwrNumer]  DEFAULT ((0)) FOR [TwZ_TwrNumer]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_TwrLp]  DEFAULT ((0)) FOR [TwZ_TwrLp]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_MagTyp]  DEFAULT ((0)) FOR [TwZ_MagTyp]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_MagFirma]  DEFAULT ((0)) FOR [TwZ_MagFirma]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_MagNumer]  DEFAULT ((0)) FOR [TwZ_MagNumer]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_MagLp]  DEFAULT ((0)) FOR [TwZ_MagLp]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_DataP]  DEFAULT ((0)) FOR [TwZ_DataP]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_KsiegowaNetto]  DEFAULT ((0)) FOR [TwZ_KsiegowaNetto]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_RzeczywistaNetto]  DEFAULT ((0)) FOR [TwZ_RzeczywistaNetto]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_Ean]  DEFAULT ('') FOR [TwZ_Ean]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_Polozenie]  DEFAULT ('') FOR [TwZ_Polozenie]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_DataW]  DEFAULT ((0)) FOR [TwZ_DataW]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_KosztKsiegowy]  DEFAULT ((0)) FOR [TwZ_KosztKsiegowy]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_KosztRzeczywisty]  DEFAULT ((0)) FOR [TwZ_KosztRzeczywisty]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_IlSpr]  DEFAULT ((0)) FOR [TwZ_IlSpr]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_IlMag]  DEFAULT ((0)) FOR [TwZ_IlMag]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_Ilosc]  DEFAULT ((0)) FOR [TwZ_Ilosc]
+GO
+ALTER TABLE [CDN].[TwrZasoby] ADD  CONSTRAINT [DF_TwZ_IloscWMS]  DEFAULT ((0)) FOR [TwZ_IloscWMS]
+GO

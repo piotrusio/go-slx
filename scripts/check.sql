@@ -1,5 +1,3 @@
-USE ERPXL_GO;
-GO
 
 -- list tracking database
 SELECT b.name as db_name, a.retention_period, a.retention_period_units_desc
@@ -14,8 +12,12 @@ ORDER BY tbl_name;
 
 --update customers
 UPDATE CDN.KntKarty SET Knt_Nazwa2 = 'TEST1' WHERE Knt_GIDNumer < 10;
-DELETE CDN.KntKarty WHERE Knt_GidNumer = 20;
+DELETE CDN.KntKarty WHERE Knt_GidNumer = 10;
 
 --update fabrics
 UPDATE CDN.TwrKarty SET Twr_Nazwa1 = 'TEST1' WHERE Twr_GidNumer < 10;
-DELETE FROM CDN.TwrKarty WHERE Twr_GIDNumer = 20;
+DELETE FROM CDN.TwrKarty WHERE Twr_GIDNumer = 10;
+
+--update prices
+UPDATE CDN.TwrCeny SET twc_waluta = 'USD' WHERE twc_id < 10;
+DELETE FROM CDN.TwrCeny WHERE Twc_ID = 10;

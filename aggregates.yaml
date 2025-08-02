@@ -1,6 +1,6 @@
 aggregates:
   - name: "sku"
-    interval: 30
+    interval: 60
     get_query: |
       SELECT
         c.SYS_CHANGE_OPERATION as change_operation,
@@ -42,27 +42,27 @@ aggregates:
           AND f.TGD_GrONumer = 2
 
   - name: "customer"
-    interval: 30
+    interval: 60
     get_query: |
       WITH changetracking_changes AS (
         SELECT
           c.SYS_CHANGE_OPERATION as change_operation,
           c.SYS_CHANGE_VERSION as change_version,
           c.Knt_GidNumer as customer_id
-        FROM CHANGETABLE(CHANGES ERPXL_GO.CDN.KntKarty, @version) AS c
+        FROM CHANGETABLE(CHANGES CDN.KntKarty, @version) AS c
         UNION
         SELECT
           c.SYS_CHANGE_OPERATION,
           c.SYS_CHANGE_VERSION,
           a.KnA_KntNumer
-        FROM CHANGETABLE(CHANGES ERPXL_GO.CDN.KntAdresy, @version) AS c
-          JOIN ERPXL_GO.CDN.KntAdresy a ON c.KnA_GidNumer = a.KnA_GIDNumer
+        FROM CHANGETABLE(CHANGES CDN.KntAdresy, @version) AS c
+          JOIN CDN.KntAdresy a ON c.KnA_GidNumer = a.KnA_GIDNumer
         UNION
         SELECT
           c.SYS_CHANGE_OPERATION,
           c.SYS_CHANGE_VERSION,
           c.KnS_KntNumer
-        FROM CHANGETABLE(CHANGES ERPXL_GO.CDN.KntOsoby, @version) AS c
+        FROM CHANGETABLE(CHANGES CDN.KntOsoby, @version) AS c
       ), customers AS (
         SELECT
           customer_id,
@@ -122,7 +122,7 @@ aggregates:
                 a.kna_modem as adress_mode,
                 a.kna_telex as adress_gsm,
                 a.kna_email as adress_email
-              FROM ERPXL_GO.CDN.KntAdresy a
+              FROM CDN.KntAdresy a
               WHERE a.KnA_KntNumer = k.Knt_GIDNumer AND a.kna_dataarc = 0
               FOR JSON PATH
             )) AS adresses,
@@ -134,7 +134,7 @@ aggregates:
                 o.kns_email as email,
                 o.kns_telefon as phone,
                 o.kns_telefonk as mobile
-              FROM ERPXL_GO.CDN.KntOsoby o
+              FROM CDN.KntOsoby o
               WHERE k.Knt_GIDNumer = o.KnS_KntNumer AND o.kns_archiwalny = 0
               FOR JSON PATH
             )) AS contacts,
@@ -145,7 +145,7 @@ aggregates:
                 DATEADD(DAY, o.klk_datado, '1800-12-28') as valid_to,
                 o.klk_maxlimitwart as credit_value,
                 o.klk_waluta as credit_currency
-              FROM ERPXL_GO.CDN.KntLimityK o
+              FROM CDN.KntLimityK o
               WHERE k.Knt_GIDNumer = o.Klk_KntNumer
                 AND o.klk_datado > DATEDIFF(DAY, '1800-12-28', GETDATE())
               FOR JSON PATH
@@ -153,9 +153,77 @@ aggregates:
           FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
         )) AS payload
       FROM customers AS c
-        JOIN ERPXL_GO.CDN.KntKarty AS k ON c.customer_id = k.knt_gidnumer
-        JOIN ERPXL_GO.CDN.KntGrupyDom d ON k.knt_gidnumer = d.kgd_gidnumer AND d.kgd_gidtyp = k.knt_gidtyp
-        JOIN ERPXL_GO.CDN.KntGrupyDom e ON d.kgd_grotyp = e.kgd_gidtyp AND d.kgd_gronumer = e.kgd_gidnumer
-        LEFT JOIN ERPXL_GO.CDN.KntOpiekun o ON k.knt_gidnumer = o.kto_kntnumer AND k.knt_gidtyp = o.kto_knttyp
-        LEFT JOIN ERPXL_GO.CDN.PrcKarty p ON o.kto_prcnumer = p.prc_gidnumer
-        LEFT JOIN ERPXL_GO.CDN.Nazwy n ON k.knt_cena = n.naz_gidlp AND n.naz_gidtyp = 64
+        JOIN CDN.KntKarty AS k ON c.customer_id = k.knt_gidnumer
+        JOIN CDN.KntGrupyDom d ON k.knt_gidnumer = d.kgd_gidnumer AND d.kgd_gidtyp = k.knt_gidtyp
+        JOIN CDN.KntGrupyDom e ON d.kgd_grotyp = e.kgd_gidtyp AND d.kgd_gronumer = e.kgd_gidnumer
+        LEFT JOIN CDN.KntOpiekun o ON k.knt_gidnumer = o.kto_kntnumer AND k.knt_gidtyp = o.kto_knttyp
+        LEFT JOIN CDN.PrcKarty p ON o.kto_prcnumer = p.prc_gidnumer
+        LEFT JOIN CDN.Nazwy n ON k.knt_cena = n.naz_gidlp AND n.naz_gidtyp = 64
+
+  - name: "stock"
+    interval: 60
+    get_query: |
+      SELECT
+        'U' as change_operation,
+        @version + 1 as change_version,
+        CONVERT(VARCHAR(32), HASHBYTES('MD5', CAST(t.Twr_GidNumer AS VARCHAR(40))), 2) AS aggregate_key,
+        JSON_QUERY((
+          SELECT
+            t.twr_gidnumer as sku_id,
+            t.Twr_Kod sku_code,
+            JSON_QUERY((
+                SELECT
+                    x.Dst_Cecha as batch_number,
+                    m.MAG_Kod warhouse_code,
+                    m.MAG_Nazwa warehouse_name,
+                    z.TwZ_IlSpr stock_qty
+                FROM CDN.TwrZasoby z
+                    JOIN CDN.Dostawy x ON x.Dst_GidNumer = z.TwZ_DstNumer AND x.Dst_GidTyp = z.TwZ_DstTyp
+                    JOIN CDN.Magazyny m ON z.TwZ_MagNumer = m.MAG_GIDNumer
+                WHERE z.TwZ_TwrNumer = t.Twr_GIDNumer
+                    AND z.TwZ_MagNumer IN (1, 14, 19, 23, 29, 30, 35, 70, 81, 83, 87, 88)
+                FOR JSON PATH
+            )) AS sku_stock
+          FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        )) AS payload 
+      FROM CDN.TwrKarty t
+          JOIN CDN.TwrGrupyDom d ON t.Twr_GIDNumer = d.TGD_GIDNumer and t.Twr_GIDTyp = d.TGD_GIDTyp
+          JOIN CDN.TwrGrupyDom e ON d.TGD_GrONumer = e.TGD_GIDNumer and d.TGD_GrOTyp = e.TGD_GIDTyp
+          JOIN CDN.TwrGrupyDom f ON e.TGD_GrONumer = f.TGD_GIDNumer and e.TGD_GrOTyp = f.TGD_GIDTyp
+      WHERE 1=1
+          AND f.TGD_GrOTyp = -16
+          AND f.TGD_GrONumer = 2
+          AND t.Twr_Archiwalny = 0
+
+  - name: "pricelist"
+    interval: 60
+    get_query: |
+      SELECT
+          a.SYS_CHANGE_OPERATION AS change_operation,
+          a.SYS_CHANGE_VERSION as change_version,
+          CONVERT(VARCHAR(32), HASHBYTES('MD5', CAST(c.TwC_TwrNumer AS VARCHAR(40))), 2) AS aggregate_key,
+          JSON_QUERY((
+              SELECT
+                  c.twc_tcnid as pricelist_id,
+                  c.twc_id as price_id,
+                  t.Twr_GIDNumer as sku_id,
+                  t.TwR_Kod as sku_code,
+                  SUBSTRING(x.naz_nazwa,1,10) as pricelist_name,
+                  c.twc_waluta as price_currency,
+                  c.twc_wartosc as price_value,
+                  SUBSTRING(x.naz_nazwa,11,1) AS price_type
+              FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+          )) AS payload
+      FROM CHANGETABLE(CHANGES CDN.TwrCeny, @version) AS a
+          JOIN CDN.TwrCeny c ON a.TwC_ID = c.TwC_ID
+          JOIN CDN.TwrCenyNag n ON c.TwC_TcNId = n.TCN_Id
+          JOIN CDN.TwrKarty t ON c.TwC_TwrNumer = t.Twr_GIDNumer
+          JOIN CDN.Nazwy x ON n.TCN_RodzajCeny = x.Naz_GIDLp AND x.Naz_GIDTyp = 64
+          JOIN CDN.TwrGrupyDom d ON t.Twr_GIDNumer = d.TGD_GIDNumer and t.Twr_GIDTyp = d.TGD_GIDTyp
+          JOIN CDN.TwrGrupyDom e ON d.TGD_GrONumer = e.TGD_GIDNumer and d.TGD_GrOTyp = e.TGD_GIDTyp
+          JOIN CDN.TwrGrupyDom f ON e.TGD_GrONumer = f.TGD_GIDNumer and e.TGD_GrOTyp = f.TGD_GIDTyp
+      WHERE 1=1
+          AND n.tcn_stan = 5
+          AND f.TGD_GrOTyp = -16
+          AND f.TGD_GrONumer = 2
+          AND t.Twr_Archiwalny = 0

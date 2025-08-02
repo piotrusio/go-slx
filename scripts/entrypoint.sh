@@ -221,6 +221,17 @@ if [ -d /var/opt/mssql/import ] && [ ! -f /var/opt/mssql/.data_imported ]; then
             fi
         fi
 
+        # Import TwrZasoby table
+        if [ -f /var/opt/mssql/import/TwrZasoby.dat ]; then
+            echo "Importing TwrZasoby..."
+            /opt/mssql-tools18/bin/bcp ERPXL_GO.CDN.TwrZasoby in "/var/opt/mssql/import/TwrZasoby.dat" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -n -u
+            if [ $? -eq 0 ]; then
+                echo "✓ TwrZasoby imported successfully"
+            else
+                echo "✗ Failed to import TwrZasoby"
+            fi
+        fi
+
         # Import ZamNag table
         if [ -f /var/opt/mssql/import/ZamNag.dat ]; then
             echo "Importing ZamNag..."
@@ -272,6 +283,7 @@ if [ -d /var/opt/mssql/import ] && [ ! -f /var/opt/mssql/.data_imported ]; then
             UNION ALL SELECT 'TwrGrupyDom', COUNT(*) FROM ERPXL_GO.CDN.TwrGrupyDom
             UNION ALL SELECT 'TwrKarty', COUNT(*) FROM ERPXL_GO.CDN.TwrKarty
             UNION ALL SELECT 'TwrPromocje', COUNT(*) FROM ERPXL_GO.CDN.TwrPromocje
+            UNION ALL SELECT 'TwrZasoby', COUNT(*) FROM ERPXL_GO.CDN.TwrZasoby
             UNION ALL SELECT 'ZamElem', COUNT(*) FROM ERPXL_GO.CDN.ZamElem
             UNION ALL SELECT 'ZamNag', COUNT(*) FROM ERPXL_GO.CDN.ZamNag
             " -C
