@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"context"
@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/salesworks/s-works/slx/internal/database"
+	"github.com/salesworks/s-works/slx/internal/dispatcher"
+	"github.com/salesworks/s-works/slx/internal/messaging"
+	"github.com/salesworks/s-works/slx/internal/repository"
+	"github.com/salesworks/s-works/slx/internal/tracker"
 	"gopkg.in/natefinch/lumberjack.v2"
-	"gworks.dev/slx/internal/database"
-	"gworks.dev/slx/internal/dispatcher"
-	"gworks.dev/slx/internal/messaging"
-	"gworks.dev/slx/internal/repository"
-	"gworks.dev/slx/internal/tracker"
 )
 
 type config struct {
@@ -42,11 +42,11 @@ type publisherConfig struct {
 }
 
 type loggerConfig struct {
-    Filename   string
-    MaxSize    int
-    MaxBackups int
-    MaxAge     int
-    Compress   bool
+	Filename   string
+	MaxSize    int
+	MaxBackups int
+	MaxAge     int
+	Compress   bool
 }
 
 type dispatcherConfig struct {
@@ -54,27 +54,17 @@ type dispatcherConfig struct {
 	jobQueueSize int
 }
 
-func main() {
-	if err := run(); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func run() error {
+func Run() error {
 	cfg := loadConfig()
 
-	logger := newLogger(context.Background(), cfg.env, cfg.log)
-	logger.Info("SLX service starting", "env", cfg.env)
+	logger := newLogger(cfg.env, cfg.log)
+	logger.Info("SLX Service starting", "env", cfg.env)
 
-	// main context for graceful shutdown
-	appCtx, stop := signal.NotifyContext(
-		context.Background(), syscall.SIGINT, syscall.SIGTERM,
-	)
+	appCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	// context for external services startup
-	startupCtx, startupCancel := context.WithTimeout(appCtx, 30*time.Second)
+	startupCtx, startupCancel := context.WithTimeout(appCtx, 200*time.Second)
 	defer startupCancel()
 
 	// Initialize the SQL Server database connection pool
@@ -104,7 +94,7 @@ func run() error {
 	defer natsconn.Close()
 	publisher := messaging.NewNatsPublisher(natsconn, logger)
 	defer publisher.Close()
-	logger.Info("NATS publisher initialized")
+	logger.Info("NATS publisher initialized", "url", cfg.nats.url)
 
 	// Initialize Dispatcher
 	disp := dispatcher.NewDispatcher(cfg.disp.numWorkers, cfg.disp.jobQueueSize, publisher, logger)
@@ -139,9 +129,32 @@ func run() error {
 	// shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	// defer shutdownCancel()
 
+	logger.Info("All background processes have finished. Application shut down gracefully.")
+
 	var shutdownErr error
 	logger.Info("SLX Service exiting.")
 	return shutdownErr
+}
+
+func newLogger(env string, logCfg loggerConfig) *slog.Logger {
+	var handler slog.Handler
+
+	if env == "development" {
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
+	} else {
+		lumberjackLogger := &lumberjack.Logger{
+			Filename:   logCfg.Filename,
+			MaxSize:    logCfg.MaxSize,
+			MaxBackups: logCfg.MaxBackups,
+			MaxAge:     logCfg.MaxAge,
+			Compress:   logCfg.Compress,
+		}
+
+		handler = slog.NewTextHandler(lumberjackLogger, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		})
+	}
+	return slog.New(handler)
 }
 
 func loadConfig() config {
@@ -153,45 +166,46 @@ func loadConfig() config {
 	}
 
 	cfg.log.Filename = os.Getenv("LOG_FILENAME")
-    if cfg.log.Filename == "" {
-        cfg.log.Filename = "./.logs/slx.log"
-    }
+	if cfg.env != "development" && cfg.log.Filename == "" {
+		panic("LOG_FILENAME must be set in production environment")
+	} else {
+		cfg.log.Filename = "./slx.log"
+	}
 
-    maxSize, _ := strconv.Atoi(os.Getenv("LOG_MAX_SIZE"))
-    if maxSize == 0 {
-        maxSize = 100 // 100 MB
-    }
-    cfg.log.MaxSize = maxSize
+	maxSize, _ := strconv.Atoi(os.Getenv("LOG_MAX_SIZE"))
+	if maxSize == 0 {
+		maxSize = 100 // 100 MB
+	}
+	cfg.log.MaxSize = maxSize
 
-    maxBackups, _ := strconv.Atoi(os.Getenv("LOG_MAX_BACKUPS"))
-    if maxBackups == 0 {
-        maxBackups = 3
-    }
-    cfg.log.MaxBackups = maxBackups
+	maxBackups, _ := strconv.Atoi(os.Getenv("LOG_MAX_BACKUPS"))
+	if maxBackups == 0 {
+		maxBackups = 3
+	}
+	cfg.log.MaxBackups = maxBackups
 
-    maxAge, _ := strconv.Atoi(os.Getenv("LOG_MAX_AGE"))
-    if maxAge == 0 {
-        maxAge = 28 // days
-    }
-    cfg.log.MaxAge = maxAge
+	maxAge, _ := strconv.Atoi(os.Getenv("LOG_MAX_AGE"))
+	if maxAge == 0 {
+		maxAge = 28 // days
+	}
+	cfg.log.MaxAge = maxAge
 
-    compress := os.Getenv("LOG_COMPRESS")
-    cfg.log.Compress = compress == "true"
+	compress := os.Getenv("LOG_COMPRESS")
+	cfg.log.Compress = compress == "true"
 
 	cfg.nats.url = os.Getenv("NATS_URL")
 	if cfg.nats.url == "" {
-		cfg.nats.url = "nats://localhost:4222"
+		panic("NATS_URL must be set in production environment")
 	}
 
 	cfg.nats.creds = os.Getenv("NATS_CREDS")
 	if cfg.nats.creds == "" {
-		cfg.nats.creds = "synadia.creds"
+		panic("NATS_CREDS must be set in production environment")
 	}
 
 	cfg.db.uri = os.Getenv("SQLSERVER_URI")
 	if cfg.db.uri == "" {
-		// Default to local SQL Server for development
-		cfg.db.uri = "sqlserver://sa:SalesW0rk5@localhost:1433?database=ERPXL_GO&trustServerCertificate=true"
+		panic("SQLSERVER_URI must be set in production environment")
 	}
 
 	openConns, _ := strconv.Atoi(os.Getenv("DB_MAX_OPEN_CONNS"))
@@ -226,34 +240,13 @@ func loadConfig() config {
 
 	cfg.db.path = os.Getenv("DB_PATH")
 	if cfg.db.path == "" {
-		cfg.db.path = "./.data/bbolt.db"
+		panic("DB_PATH must be set in production environment")
 	}
 
 	cfg.aggPath = os.Getenv("AGG_PATH")
 	if cfg.aggPath == "" {
-		cfg.aggPath = "./aggregates.yaml"
+		panic("AGG_PATH must be set in production environment")
 	}
 
 	return cfg
-}
-
-func newLogger(ctx context.Context, env string, logCfg loggerConfig) *slog.Logger {
-	var handler slog.Handler
-
-	if env == "development" {
-		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
-	} else {
-		lumberjackLogger := &lumberjack.Logger{
-			Filename:   logCfg.Filename,
-			MaxSize:    logCfg.MaxSize,
-			MaxBackups: logCfg.MaxBackups,
-			MaxAge:     logCfg.MaxAge,
-			Compress:   logCfg.Compress,
-		}
-
-		handler = slog.NewTextHandler(lumberjackLogger, &slog.HandlerOptions{
-			Level: slog.LevelInfo,
-		})
-	}
-	return slog.New(handler)
 }

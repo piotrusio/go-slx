@@ -45,45 +45,45 @@ func TestBBoltRepository_RegisterAggregates(t *testing.T) {
 }
 
 func TestBBoltRepository_RegisterAggregates_PreservesExistingValues(t *testing.T) {
-    // --- Arrange ---
-    tempDir := t.TempDir()
-    dbPath := filepath.Join(tempDir, "test.db")
-    logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-    ctx := context.Background()
+	// --- Arrange ---
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	ctx := context.Background()
 
-    repo, err := NewBBoltRepository(dbPath, logger)
-    require.NoError(t, err, "NewBBoltRepository should not return an error")
-    defer repo.Close()
+	repo, err := NewBBoltRepository(dbPath, logger)
+	require.NoError(t, err, "NewBBoltRepository should not return an error")
+	defer repo.Close()
 
-    // First, register aggregates with initial values
-    err = repo.RegisterAggregates(ctx, []string{"users", "orders"})
-    require.NoError(t, err, "RegisterAggregates should not return an error")
+	// First, register aggregates with initial values
+	err = repo.RegisterAggregates(ctx, []string{"users", "orders"})
+	require.NoError(t, err, "RegisterAggregates should not return an error")
 
-    // Update some aggregates to have non-zero values
-    err = repo.UpdateChangeVersion(ctx, "users", 5)
-    require.NoError(t, err, "UpdateChangeVersion should not return an error")
-    err = repo.UpdateChangeVersion(ctx, "orders", 10)
-    require.NoError(t, err, "UpdateChangeVersion should not return an error")
+	// Update some aggregates to have non-zero values
+	err = repo.UpdateChangeVersion(ctx, "users", 5)
+	require.NoError(t, err, "UpdateChangeVersion should not return an error")
+	err = repo.UpdateChangeVersion(ctx, "orders", 10)
+	require.NoError(t, err, "UpdateChangeVersion should not return an error")
 
-    // --- Act ---
-    // Call RegisterAggregates again with existing and new aggregates
-    err = repo.RegisterAggregates(ctx, []string{"users", "orders", "products"})
-    require.NoError(t, err, "RegisterAggregates should not return an error")
+	// --- Act ---
+	// Call RegisterAggregates again with existing and new aggregates
+	err = repo.RegisterAggregates(ctx, []string{"users", "orders", "products"})
+	require.NoError(t, err, "RegisterAggregates should not return an error")
 
-    // --- Assert ---
-    // Verify that existing aggregates kept their values
-    usersVersion, err := repo.GetChangeVersion(ctx, "users")
-    require.NoError(t, err, "GetChangeVersion should not return an error")
-    assert.Equal(t, int64(5), usersVersion, "users should preserve its existing value")
+	// --- Assert ---
+	// Verify that existing aggregates kept their values
+	usersVersion, err := repo.GetChangeVersion(ctx, "users")
+	require.NoError(t, err, "GetChangeVersion should not return an error")
+	assert.Equal(t, int64(5), usersVersion, "users should preserve its existing value")
 
-    ordersVersion, err := repo.GetChangeVersion(ctx, "orders")
-    require.NoError(t, err, "GetChangeVersion should not return an error")
-    assert.Equal(t, int64(10), ordersVersion, "orders should preserve its existing value")
+	ordersVersion, err := repo.GetChangeVersion(ctx, "orders")
+	require.NoError(t, err, "GetChangeVersion should not return an error")
+	assert.Equal(t, int64(10), ordersVersion, "orders should preserve its existing value")
 
-    // Verify that new aggregate was created with 0
-    productsVersion, err := repo.GetChangeVersion(ctx, "products")
-    require.NoError(t, err, "GetChangeVersion should not return an error")
-    assert.Equal(t, int64(0), productsVersion, "products should be created with version 0")
+	// Verify that new aggregate was created with 0
+	productsVersion, err := repo.GetChangeVersion(ctx, "products")
+	require.NoError(t, err, "GetChangeVersion should not return an error")
+	assert.Equal(t, int64(0), productsVersion, "products should be created with version 0")
 }
 
 func TestBBoltRepository_UpdateChangeVersion(t *testing.T) {

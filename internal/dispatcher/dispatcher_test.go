@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"gworks.dev/slx/internal/messaging"
+	"github.com/salesworks/s-works/slx/internal/messaging"
 )
 
 // mockPublisher records Publish invocations and signals a WaitGroup.

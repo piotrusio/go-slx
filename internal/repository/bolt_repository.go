@@ -33,11 +33,11 @@ func NewBBoltRepository(dbPath string, logger *slog.Logger) (*BBoltRepository, e
 
 // RegisterAggregates inserts aggregate names with counter = 0
 func (r *BBoltRepository) RegisterAggregates(ctx context.Context, aggregates []string) error {
-    return r.db.Update(func(tx *bbolt.Tx) error {
-        b, err := tx.CreateBucketIfNotExists([]byte("aggregates"))
-        if err != nil {
-            return err
-        }
+	return r.db.Update(func(tx *bbolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte("aggregates"))
+		if err != nil {
+			return err
+		}
 
 		for _, name := range aggregates {
 			existing := b.Get([]byte(name))
@@ -49,7 +49,7 @@ func (r *BBoltRepository) RegisterAggregates(ctx context.Context, aggregates []s
 			}
 		}
 		return nil
-    })
+	})
 }
 
 // GetChangeVersion returns the last change version for the given aggregate name

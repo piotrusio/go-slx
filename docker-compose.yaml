@@ -14,9 +14,9 @@ services:
     volumes:
       - ${HOME}/Sqlserver/slx:/var/opt/mssql
       - ./.data:/var/opt/mssql/import
-      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-      - ./scripts/post-import.sql:/docker-entrypoint-initdb.d/post-import.sql:ro
-      - ./scripts/entrypoint.sh:/entrypoint.sh:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./post-import.sql:/docker-entrypoint-initdb.d/post-import.sql:ro
+      - ./entrypoint.sh:/entrypoint.sh:ro
     entrypoint: ["/entrypoint.sh"]
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q \"SELECT 1\" -C || exit 1"]

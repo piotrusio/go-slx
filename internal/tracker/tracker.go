@@ -9,9 +9,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/salesworks/s-works/slx/internal/dispatcher"
+	"github.com/salesworks/s-works/slx/internal/messaging"
 	"gopkg.in/yaml.v3"
-	"gworks.dev/slx/internal/dispatcher"
-	"gworks.dev/slx/internal/messaging"
 )
 
 // TrackerRepository defines the interface for the tracker repository
@@ -221,8 +221,7 @@ func (t *Tracker) fetchErpChanges(ctx context.Context, name, query string, versi
 	return counter, maxVersion, nil
 }
 
-
-func (t *Tracker) dispatchErpChange(event ChangeEvent,  agggergateName string) error {
+func (t *Tracker) dispatchErpChange(event ChangeEvent, agggergateName string) error {
 	eventType := fmt.Sprintf("erp.%s.%s", agggergateName, event.ChangeOperation)
 	eventChannel := fmt.Sprintf("erp.%s", agggergateName)
 

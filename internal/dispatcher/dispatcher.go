@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"gworks.dev/slx/internal/messaging"
+	"github.com/salesworks/s-works/slx/internal/messaging"
 )
 
 // Publisher defines the interface for any service that can publish an event to an external system

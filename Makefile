@@ -1,24 +1,55 @@
-.PHONY: help install build run stop rebuild test clean migrate-up
+# Makefile for building the SLX cross-platform service
 
-help:
-	@echo "Available commands:"
-	@echo "  start        Start docker service"
-	@echo "  stop         Stop doker services"
-	@echo "  run          Run the application"
-	@echo "  test         Run tests"
-	@echo "  fmt          Format the code"
+# --- Variables ---
+# Define output directories and binary names
+BUILD_DIR=./bin
+WINDOWS_BINARY=$(BUILD_DIR)/slx-windows.exe
+UNIX_BINARY=$(BUILD_DIR)/slx-unix
 
-start:
-	docker compose up -d
+# Define paths to the main packages
+WINDOWS_MAIN=./cmd/slx-windows
+UNIX_MAIN=./cmd/slx-unix
 
-stop:
-	docker compose down
+# --- Build Commands ---
 
-run:
-	go run -race cmd/slx/main.go
+# Default command: build both binaries
+.PHONY: all
+all: build
 
-test:
-	go test -v ./...
+# Build both binaries by calling their specific targets
+.PHONY: build
+build: build-windows build-unix
 
+# Builds the Windows executable
+.PHONY: build-windows
+build-windows:
+	@echo "--> Building Windows executable..."
+	@mkdir -p $(BUILD_DIR)
+	@GOOS=windows GOARCH=amd64 go build -o $(WINDOWS_BINARY) $(WINDOWS_MAIN)
+	@echo "--> Build complete: $(WINDOWS_BINARY)"
+
+# Builds the Unix executable
+.PHONY: build-unix
+build-unix:
+	@echo "--> Building Unix executable..."
+	@mkdir -p $(BUILD_DIR)
+	@GOOS=linux GOARCH=amd64 go build -o $(UNIX_BINARY) $(UNIX_MAIN)
+	@echo "--> Build complete: $(UNIX_BINARY)"
+
+# --- Formatting ---
+
+# Formats Go code and organizes imports using goimports
+.PHONY: fmt
 fmt:
-	goimports -w .
+	@echo "--> Formatting Go code..."
+	@goimports -w .
+	@echo "--> Formatting complete."
+
+# --- Cleanup ---
+
+# Removes all build artifacts
+.PHONY: clean
+clean:
+	@echo "--> Cleaning up build artifacts..."
+	@rm -rf $(BUILD_DIR)
+	@echo "--> Cleanup complete."

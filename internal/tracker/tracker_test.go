@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/salesworks/s-works/slx/internal/dispatcher"
+	"github.com/salesworks/s-works/slx/internal/messaging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gworks.dev/slx/internal/dispatcher"
-	"gworks.dev/slx/internal/messaging"
 )
 
 type mockPublisher struct {
@@ -73,7 +73,6 @@ func (m *mockTrackerRepository) UpdateChangeVersion(
 	return nil
 }
 
-// 
 func TestTracker_NewTracker_HappyPath(t *testing.T) {
 	// --- Arrange ---
 	db, _, err := sqlmock.New()
@@ -309,17 +308,17 @@ func TestTracker_ErpDispatcher(t *testing.T) {
 	dispatcher := dispatcher.NewDispatcher(1, 10, publisher, logger)
 
 	tracker := &Tracker{
-		aggregates:  []Aggregate{{Name: "fabric"}, {Name: "customer"}},
-		repository:  trackerRepo,
-		logger:      logger,
-		dispatcher:  dispatcher,
+		aggregates: []Aggregate{{Name: "fabric"}, {Name: "customer"}},
+		repository: trackerRepo,
+		logger:     logger,
+		dispatcher: dispatcher,
 	}
 
 	correctEvent := ChangeEvent{
 		ChangeOperation: "created",
-		ChangeVersion: 1,
-		AggregateKey: "C4CA4238A0B923820DCC509A6F75849A",
-		Payload: `{}`,
+		ChangeVersion:   1,
+		AggregateKey:    "C4CA4238A0B923820DCC509A6F75849A",
+		Payload:         `{}`,
 	}
 
 	corruptedEvent := ChangeEvent{}
