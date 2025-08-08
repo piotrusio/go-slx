@@ -22,10 +22,15 @@ import (
 type config struct {
 	env     string
 	db      dbConfig
+	pg		pgConfig
 	nats    publisherConfig
 	log     loggerConfig
 	disp    dispatcherConfig
 	aggPath string
+}
+
+type pgConfig struct {
+	uri string
 }
 
 type dbConfig struct {
@@ -95,6 +100,19 @@ func Run() error {
 	publisher := messaging.NewNatsPublisher(natsconn, logger)
 	defer publisher.Close()
 	logger.Info("NATS publisher initialized", "url", cfg.nats.url)
+
+	// Initialize Postgres
+	postgres, err := database.NewPostgres(startupCtx, cfg.pg.uri, logger)
+	if err != nil {
+		logger.Error("failed to initialize postgres database", "error", err)
+		return fmt.Errorf("failed to connect to postgres database %w", err)
+	}
+	defer func() {
+		postgres.Close()
+		logger.Info("postgres database connection pool closed")
+	}()
+	logger.Info("succesfully connected to postgres database")
+
 
 	// Initialize Dispatcher
 	disp := dispatcher.NewDispatcher(cfg.disp.numWorkers, cfg.disp.jobQueueSize, publisher, logger)
@@ -201,6 +219,11 @@ func loadConfig() config {
 	cfg.nats.creds = os.Getenv("NATS_CREDS")
 	if cfg.nats.creds == "" {
 		panic("NATS_CREDS must be set in production environment")
+	}
+
+	cfg.pg.uri = os.Getenv("POSTGRES_URI")
+	if cfg.pg.uri == "" {
+		panic("POSTGRES_URI must be set in production environment")
 	}
 
 	cfg.db.uri = os.Getenv("SQLSERVER_URI")
